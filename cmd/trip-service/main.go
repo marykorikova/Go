@@ -11,8 +11,16 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
+	"github.com/marykorikova/Go/internal/api"
 	"github.com/marykorikova/Go/internal/config"
+	"github.com/marykorikova/Go/internal/db"
+	apiGen "github.com/marykorikova/Go/internal/generated"
 	"github.com/marykorikova/Go/internal/logger"
+	"github.com/marykorikova/Go/internal/repository"
+	"github.com/marykorikova/Go/internal/service"
+	"github.com/marykorikova/Go/internal/txmanager"
 )
 
 func main() {
@@ -24,12 +32,48 @@ func main() {
 
 	log := logger.New(cfg.LogLevel)
 
-	r := chi.NewRouter()
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Database.ConnectTimeout)
+	pool, err := db.New(ctx, db.Config{
+		URL:             cfg.Database.URL,
+		MaxConns:        cfg.Database.MaxConns,
+		MinConns:        cfg.Database.MinConns,
+		ConnectTimeout:  cfg.Database.ConnectTimeout,
+		MaxConnLifetime: cfg.Database.MaxConnLifetime,
 	})
+	cancel()
+	if err != nil {
+		log.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	txm := txmanager.New(pool)
+	repo := repository.NewTripRepository(pool)
+	svc := service.NewTripService(repo, txm)
+	handler := api.NewHandler(svc)
+
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+
+	r.Post("/api/v1/trips", func(w http.ResponseWriter, r *http.Request) {
+		handler.CreateTrip(w, r, apiGen.CreateTripParams{})
+	})
+	
+	r.Get("/api/v1/trips/{tripId}", func(w http.ResponseWriter, r *http.Request) {
+		tripId := chi.URLParam(r, "tripId")
+		// Преобразуем строку в UUID (можно добавить обработку ошибки)
+		uuid, _ := uuid.Parse(tripId)
+		handler.GetTrip(w, r, uuid)
+	})
+
+	r.Post("/api/v1/trips/{tripId}/finish", func(w http.ResponseWriter, r *http.Request) {
+		tripId := chi.URLParam(r, "tripId")
+		uuid, _ := uuid.Parse(tripId)
+		handler.FinishTrip(w, r, uuid)
+	})
+
+	r.Get("/health", handler.Health)
+	r.Get("/ready", handler.Ready)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -53,10 +97,10 @@ func main() {
 	<-stop
 
 	log.Info("shutting down")
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "error", err)
 	}
 	log.Info("server stopped")
