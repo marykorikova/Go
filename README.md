@@ -21,22 +21,22 @@
 tripgoctl cluster start
 tripgoctl environment start
 tripgoctl connect
-
+```
 Применить миграции:
-
+```bash
 export $(grep -v '^#' .env | xargs)
 goose -dir migrations postgres "$DATABASE_URL" up
-
+```
 Посмотреть их состояние:
-
+```bash
 export $(grep -v '^#' .env | xargs)
 goose -dir migrations postgres "$DATABASE_URL" status
-
+```
 Откатить последнюю миграцию:
-
+```bash
 export $(grep -v '^#' .env | xargs)
 goose -dir migrations postgres "$DATABASE_URL" down
-
+```
 В проекте создаются две таблицы:
 
 trips — поездки;
@@ -45,10 +45,10 @@ trip_status_history — история изменения статусов.
 
 
 Запуск сервиса
-
+```bash
 export $(grep -v '^#' .env | xargs)
 go run ./cmd/trip-service
-
+```
 Сервис запускается на порту 8080.
 
 Генерация кода
@@ -57,9 +57,9 @@ go run ./cmd/trip-service
 go tool oapi-codegen -generate types,chi-server -package api -o internal/generated/api.gen.go contracts/openapi/trip-service.openapi.yaml
 
 Сгенерированный файл:
-
+```bash
 internal/generated/api.gen.go
-
+```
 Его не нужно изменять вручную.
 
 Переменные окружения
@@ -88,15 +88,15 @@ DATABASE_QUERY_TIMEOUT — таймаут SQL-запроса.
 HTTP-запросы
 
 Проверка работы процесса:
-
+```bash
 curl -i localhost:8080/health
-
+```
 Проверка доступности базы:
-
+```bash
 curl -i localhost:8080/ready
-
+```
 Создание поездки:
-
+```bash
 curl -i -X POST localhost:8080/api/v1/trips \
   -H 'Content-Type: application/json' \
   -d '{
@@ -112,16 +112,16 @@ curl -i -X POST localhost:8080/api/v1/trips \
     },
     "price": 1450
   }'
-
+```
 Получение поездки:
-
+```bash
 curl -i localhost:8080/api/v1/trips/<trip-id>
-
+```
 Завершение поездки:
-
+```bash
 curl -i -X POST \
   localhost:8080/api/v1/trips/<trip-id>/finish
-
+```
 Решения
 Транзакции
 Используется уровень изоляции Read Committed.
@@ -140,20 +140,21 @@ curl -i -X POST \
 
 Один водитель и одна активная поездка
 В PostgreSQL создан уникальный индекс:
-
+```bash
 sql
 CREATE UNIQUE INDEX trips_driver_active_idx
 ON trips (driver_id)
 WHERE status = 'active';
+```
 Он запрещает создавать две активные поездки одному водителю.
 
 При нарушении индекса PostgreSQL возвращает ошибку 23505. Сервис преобразует её в ответ 409 driver_busy.
 
 Завершение поездки
 Поездка завершается только при статусе active:
-
+```bash
 WHERE id = $1 AND status = 'active'
-
+```
 Поэтому при двух одновременных запросах поездку завершит только один из них. Второй получит ошибку 409 trip_completed.
 
 Health и Ready
