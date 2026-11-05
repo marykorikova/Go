@@ -26,9 +26,14 @@ type DatabaseConfig struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		HTTPAddr:        getEnv("HTTP_ADDR", ":8080"),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		ShutdownTimeout: getDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+		HTTPAddr: getEnv("HTTP_ADDR", ":8080"),
+		LogLevel: getEnv("LOG_LEVEL", "info"),
+	}
+
+	var err error
+	cfg.ShutdownTimeout, err = getDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
+	if err != nil {
+		return nil, err
 	}
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -37,12 +42,22 @@ func Load() (*Config, error) {
 	}
 
 	cfg.Database = DatabaseConfig{
-		URL:             dbURL,
-		MaxConns:        int32(getInt("DATABASE_MAX_CONNS", 10)),
-		MinConns:        int32(getInt("DATABASE_MIN_CONNS", 1)),
-		ConnectTimeout:  getDuration("DATABASE_CONNECT_TIMEOUT", 5*time.Second),
-		QueryTimeout:    getDuration("DATABASE_QUERY_TIMEOUT", 5*time.Second),
-		MaxConnLifetime: getDuration("DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
+		URL:      dbURL,
+		MaxConns: int32(getInt("DATABASE_MAX_CONNS", 10)),
+		MinConns: int32(getInt("DATABASE_MIN_CONNS", 1)),
+	}
+
+	cfg.Database.ConnectTimeout, err = getDuration("DATABASE_CONNECT_TIMEOUT", 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Database.QueryTimeout, err = getDuration("DATABASE_QUERY_TIMEOUT", 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Database.MaxConnLifetime, err = getDuration("DATABASE_MAX_CONN_LIFETIME", 30*time.Minute)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -87,14 +102,14 @@ func getInt(key string, def int) int {
 	return n
 }
 
-func getDuration(key string, def time.Duration) time.Duration {
+func getDuration(key string, def time.Duration) (time.Duration, error) {
 	v := os.Getenv(key)
 	if v == "" {
-		return def
+		return def, nil
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		return def
+		return 0, fmt.Errorf("invalid duration for %s: %w", key, err)
 	}
-	return d
+	return d, nil
 }

@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/google/uuid"
 	"github.com/marykorikova/Go/internal/api"
 	"github.com/marykorikova/Go/internal/config"
 	"github.com/marykorikova/Go/internal/db"
@@ -50,30 +48,18 @@ func main() {
 	txm := txmanager.New(pool)
 	repo := repository.NewTripRepository(pool)
 	svc := service.NewTripService(repo, txm)
-	handler := api.NewHandler(svc)
+	handler := api.NewHandler(svc, pool, cfg.Database.QueryTimeout)
 
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
 
-	r.Post("/api/v1/trips", func(w http.ResponseWriter, r *http.Request) {
-		handler.CreateTrip(w, r, apiGen.CreateTripParams{})
+	apiGen.HandlerWithOptions(handler, apiGen.ChiServerOptions{
+		BaseRouter: r,
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"type":"https://tripgo.example/problems/invalid-request","title":"invalid_request","status":400,"detail":"invalid path parameters","code":"invalid_request"}`))
+		},
 	})
-	
-	r.Get("/api/v1/trips/{tripId}", func(w http.ResponseWriter, r *http.Request) {
-		tripId := chi.URLParam(r, "tripId")
-		// Преобразуем строку в UUID (можно добавить обработку ошибки)
-		uuid, _ := uuid.Parse(tripId)
-		handler.GetTrip(w, r, uuid)
-	})
-
-	r.Post("/api/v1/trips/{tripId}/finish", func(w http.ResponseWriter, r *http.Request) {
-		tripId := chi.URLParam(r, "tripId")
-		uuid, _ := uuid.Parse(tripId)
-		handler.FinishTrip(w, r, uuid)
-	})
-
-	r.Get("/health", handler.Health)
-	r.Get("/ready", handler.Ready)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

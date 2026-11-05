@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/marykorikova/Go/internal/generated"
+	apiGen "github.com/marykorikova/Go/internal/generated"
 	"github.com/marykorikova/Go/internal/txmanager"
 )
 
@@ -27,7 +27,6 @@ func NewTripRepository(pool txmanager.Executor) *TripRepository {
 	return &TripRepository{pool: pool}
 }
 
-
 func (r *TripRepository) getExecutor(ctx context.Context) txmanager.Executor {
 	if tx := txmanager.TxFromContext(ctx); tx != nil {
 		return tx
@@ -35,7 +34,7 @@ func (r *TripRepository) getExecutor(ctx context.Context) txmanager.Executor {
 	return r.pool
 }
 
-func (r *TripRepository) Create(ctx context.Context, trip api.Trip) error {
+func (r *TripRepository) Create(ctx context.Context, trip apiGen.Trip) error {
 	exec := r.getExecutor(ctx)
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
@@ -51,8 +50,10 @@ func (r *TripRepository) Create(ctx context.Context, trip api.Trip) error {
 	_, err = exec.Exec(ctx, sql, args...)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Нарушение уникальности
-			return ErrDriverBusy
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if pgErr.ConstraintName == "trips_driver_active_idx" {
+				return ErrDriverBusy
+			}
 		}
 		return err
 	}
@@ -61,12 +62,15 @@ func (r *TripRepository) Create(ctx context.Context, trip api.Trip) error {
 		Columns("trip_id", "to_status", "reason").
 		Values(trip.Id, trip.Status, "created")
 
-	sqlHist, argsHist, _ := historyQuery.ToSql()
+	sqlHist, argsHist, err := historyQuery.ToSql()
+	if err != nil {
+		return err
+	}
 	_, err = exec.Exec(ctx, sqlHist, argsHist...)
 	return err
 }
 
-func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (api.Trip, error) {
+func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (apiGen.Trip, error) {
 	exec := r.getExecutor(ctx)
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
@@ -74,10 +78,13 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (api.Trip, e
 		From("trips").
 		Where(squirrel.Eq{"id": id})
 
-	sql, args, _ := query.ToSql()
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return apiGen.Trip{}, err
+	}
 
-	var trip api.Trip
-	err := exec.QueryRow(ctx, sql, args...).Scan(
+	var trip apiGen.Trip
+	err = exec.QueryRow(ctx, sql, args...).Scan(
 		&trip.Id, &trip.UserId, &trip.DriverId,
 		&trip.StartPoint.Latitude, &trip.StartPoint.Longitude,
 		&trip.EndPoint.Latitude, &trip.EndPoint.Longitude,
@@ -85,12 +92,12 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (api.Trip, e
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return api.Trip{}, ErrNotFound
+		return apiGen.Trip{}, ErrNotFound
 	}
 	return trip, err
 }
 
-func (r *TripRepository) Finish(ctx context.Context, id uuid.UUID) (api.Trip, error) {
+func (r *TripRepository) Finish(ctx context.Context, id uuid.UUID) (apiGen.Trip, error) {
 	exec := r.getExecutor(ctx)
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Update("trips").
@@ -100,10 +107,13 @@ func (r *TripRepository) Finish(ctx context.Context, id uuid.UUID) (api.Trip, er
 		Where(squirrel.Eq{"id": id, "status": "active"}).
 		Suffix("RETURNING id, user_id, driver_id, start_latitude, start_longitude, end_latitude, end_longitude, price, status, started_at, finished_at")
 
-	sql, args, _ := query.ToSql()
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return apiGen.Trip{}, err
+	}
 
-	var trip api.Trip
-	err := exec.QueryRow(ctx, sql, args...).Scan(
+	var trip apiGen.Trip
+	err = exec.QueryRow(ctx, sql, args...).Scan(
 		&trip.Id, &trip.UserId, &trip.DriverId,
 		&trip.StartPoint.Latitude, &trip.StartPoint.Longitude,
 		&trip.EndPoint.Latitude, &trip.EndPoint.Longitude,
@@ -113,18 +123,26 @@ func (r *TripRepository) Finish(ctx context.Context, id uuid.UUID) (api.Trip, er
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, checkErr := r.GetByID(ctx, id)
 		if errors.Is(checkErr, ErrNotFound) {
-			return api.Trip{}, ErrNotFound
+			return apiGen.Trip{}, ErrNotFound
 		}
-		return api.Trip{}, ErrTripFinished
+		return apiGen.Trip{}, ErrTripFinished
+	}
+	if err != nil {
+		return apiGen.Trip{}, err
 	}
 
-	if err == nil {
-		historyQuery := psql.Insert("trip_status_history").
-			Columns("trip_id", "from_status", "to_status", "reason").
-			Values(id, "active", "completed", "finished by user")
-		sqlHist, argsHist, _ := historyQuery.ToSql()
-		_, _ = exec.Exec(ctx, sqlHist, argsHist...)
+	historyQuery := psql.Insert("trip_status_history").
+		Columns("trip_id", "from_status", "to_status", "reason").
+		Values(id, "active", "completed", "finished by user")
+	
+	sqlHist, argsHist, err := historyQuery.ToSql()
+	if err != nil {
+		return apiGen.Trip{}, err
+	}
+	
+	if _, err = exec.Exec(ctx, sqlHist, argsHist...); err != nil {
+		return apiGen.Trip{}, err
 	}
 
-	return trip, err
+	return trip, nil
 }
