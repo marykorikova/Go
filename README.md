@@ -19,7 +19,7 @@
 tripgoctl cluster start
 tripgoctl environment start
 tripgoctl connect
-
+```
 
 После запуска будет создан файл .env с адресом PostgreSQL.
 
@@ -32,16 +32,16 @@ tripgoctl connect
 make migrate-up
 
 Посмотреть их состояние:
-
+```bash
 export $(grep -v '^#' .env | xargs)
 goose -dir migrations postgres "$DATABASE_URL" status
-
+```
 (или make migrate-status, если добавишь такую цель в Makefile)
 
 Откатить последнюю миграцию:
-
+```bash
 make migrate-down
-
+```
 В проекте создаются две таблицы:
 
 trips — поездки;
@@ -49,9 +49,9 @@ trips — поездки;
 trip_status_history — история изменения статусов.
 
 Запуск сервиса
-
+```bash
 make run
-
+```
 Сервис запускается на порту 8080.
 
 Генерация кода
@@ -61,9 +61,9 @@ make run
 make generate
 
 Сгенерированный файл:
-
+```bash
 internal/generated/api.gen.go
-
+```
 Его не нужно изменять вручную.
 
 Переменные окружения
@@ -92,15 +92,15 @@ DATABASE_QUERY_TIMEOUT — таймаут SQL-запроса.
 
 HTTP-запросы
 Проверка работы процесса:
-
+```bash
 curl -i localhost:8080/health
-
+```
 Проверка доступности базы:
-
+```bash
 curl -i localhost:8080/ready
-
+```
 Создание поездки:
-
+```bash
 curl -i -X POST localhost:8080/api/v1/trips \
   -H 'Content-Type: application/json' \
   -d '{
@@ -116,35 +116,35 @@ curl -i -X POST localhost:8080/api/v1/trips \
     },
     "price": 1450
   }'
-
+```
 
   Получение поездки:
-
+```bash
   curl -i localhost:8080/api/v1/trips/<trip-id>
-
+```
   Завершение поездки:
-
+```bash
   curl -i -X POST \
   localhost:8080/api/v1/trips/<trip-id>/finish
-
+```
   Решения
 Транзакции
 Используется уровень изоляции Read Committed (явно задан в TxManager). Создание поездки состоит из двух запросов: запись поездки в trips и запись статуса в trip_status_history. Оба запроса выполняются в одной транзакции. Если один из них завершится с ошибкой, изменения отменятся через ROLLBACK. Если ошибок нет, выполняется COMMIT. Транзакция хранится в context. Repository берёт её оттуда. Если транзакции нет, repository использует обычный пул соединений. Если Do вызывается внутри другого Do, новая транзакция не создаётся.
 
 Один водитель и одна активная поездка
 В PostgreSQL создан уникальный индекс:
-
+```bash
 CREATE UNIQUE INDEX trips_driver_active_idx
 ON trips (driver_id)
 WHERE status = 'active';
-
+```
 Он запрещает создавать две активные поездки одному водителю. При нарушении индекса PostgreSQL возвращает ошибку 23505. Сервис преобразует её в ответ 409 driver_busy (проверяется по имени констрейнта).
 
 Завершение поездки
 Поездка завершается только при статусе active:
-
+```bash
 WHERE id = $1 AND status = 'active'
-
+```
 Поэтому при двух одновременных запросах поездку завершит только один из них. Второй получит ошибку 409 trip_completed.
 
 Health и Ready
