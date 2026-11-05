@@ -1,5 +1,8 @@
 .PHONY: build run test generate migrate-up migrate-down tidy fmt lint
 
+-include .env
+export
+
 DATABASE_URL ?= $(shell grep -E '^DATABASE_URL=' .env 2>/dev/null | cut -d= -f2-)
 
 build:
@@ -28,7 +31,7 @@ generate:
 		contracts/openapi/trip-service.openapi.yaml
 
 migrate-up:
-	goose -dir migrations postgres "$(DATABASE_URL)" up
+	go tool goose -dir migrations postgres "$(DATABASE_URL)" up
 
 migrate-down:
-	goose -dir migrations postgres "$(DATABASE_URL)" down
+	go tool goose -dir migrations postgres "$(DATABASE_URL)" down
