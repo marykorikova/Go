@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	apiGen "github.com/marykorikova/Go/internal/generated"
+	tripcreate "github.com/marykorikova/Go/internal/http/trip/create"
+	tripfinish "github.com/marykorikova/Go/internal/http/trip/finish"
+	tripget "github.com/marykorikova/Go/internal/http/trip/get"
 	"github.com/marykorikova/Go/internal/repository"
 	"github.com/marykorikova/Go/internal/service"
 )
@@ -19,6 +22,10 @@ type Handler struct {
 	svc          *service.TripService
 	pool         *pgxpool.Pool
 	queryTimeout time.Duration
+
+	createHandler *tripcreate.Handler
+	getHandler    *tripget.Handler
+	finishHandler *tripfinish.Handler
 }
 
 func NewHandler(svc *service.TripService, pool *pgxpool.Pool, queryTimeout time.Duration) *Handler {
@@ -26,6 +33,24 @@ func NewHandler(svc *service.TripService, pool *pgxpool.Pool, queryTimeout time.
 		svc:          svc,
 		pool:         pool,
 		queryTimeout: queryTimeout,
+	}
+}
+
+func NewHandlerWithUsecases(
+	svc *service.TripService,
+	pool *pgxpool.Pool,
+	queryTimeout time.Duration,
+	createHandler *tripcreate.Handler,
+	getHandler *tripget.Handler,
+	finishHandler *tripfinish.Handler,
+) *Handler {
+	return &Handler{
+		svc:           svc,
+		pool:          pool,
+		queryTimeout:  queryTimeout,
+		createHandler: createHandler,
+		getHandler:    getHandler,
+		finishHandler: finishHandler,
 	}
 }
 
@@ -43,6 +68,17 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code string,
 }
 
 func (h *Handler) CreateTrip(w http.ResponseWriter, r *http.Request, params apiGen.CreateTripParams) {
+	if h.createHandler != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
+		defer cancel()
+
+		h.createHandler.Handle(w, r.WithContext(ctx))
+		return
+	}
+
+	h.createTripLegacy(w, r)
+}
+func (h *Handler) createTripLegacy(w http.ResponseWriter, r *http.Request) {
 	var req apiGen.TripData
 
 	dec := json.NewDecoder(r.Body)
@@ -75,7 +111,7 @@ func (h *Handler) CreateTrip(w http.ResponseWriter, r *http.Request, params apiG
 		StartPoint: req.StartPoint,
 		EndPoint:   req.EndPoint,
 		Price:      req.Price,
-		Status:     apiGen.Active, 
+		Status:     apiGen.Active,
 		StartedAt:  time.Now(),
 	}
 
@@ -97,6 +133,18 @@ func (h *Handler) CreateTrip(w http.ResponseWriter, r *http.Request, params apiG
 }
 
 func (h *Handler) GetTrip(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {
+	if h.getHandler != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
+		defer cancel()
+
+		h.getHandler.Handle(w, r.WithContext(ctx), tripId)
+		return
+	}
+
+	h.getTripLegacy(w, r, tripId)
+}
+
+func (h *Handler) getTripLegacy(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
 	defer cancel()
 
@@ -115,6 +163,18 @@ func (h *Handler) GetTrip(w http.ResponseWriter, r *http.Request, tripId apiGen.
 }
 
 func (h *Handler) FinishTrip(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {
+	if h.finishHandler != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
+		defer cancel()
+
+		h.finishHandler.Handle(w, r.WithContext(ctx), tripId)
+		return
+	}
+
+	h.finishTripLegacy(w, r, tripId)
+}
+
+func (h *Handler) finishTripLegacy(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
 	defer cancel()
 

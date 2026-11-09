@@ -15,10 +15,17 @@ import (
 	"github.com/marykorikova/Go/internal/config"
 	"github.com/marykorikova/Go/internal/db"
 	apiGen "github.com/marykorikova/Go/internal/generated"
+	tripcreatehttp "github.com/marykorikova/Go/internal/http/trip/create"
+	tripfinishhttp "github.com/marykorikova/Go/internal/http/trip/finish"
+	tripgethttp "github.com/marykorikova/Go/internal/http/trip/get"
 	"github.com/marykorikova/Go/internal/logger"
 	"github.com/marykorikova/Go/internal/repository"
+	triprepo "github.com/marykorikova/Go/internal/repository/trip"
 	"github.com/marykorikova/Go/internal/service"
 	"github.com/marykorikova/Go/internal/txmanager"
+	tripcreateuc "github.com/marykorikova/Go/internal/usecase/trip/create"
+	tripfinishuc "github.com/marykorikova/Go/internal/usecase/trip/finish"
+	tripgetuc "github.com/marykorikova/Go/internal/usecase/trip/get"
 )
 
 func main() {
@@ -48,7 +55,23 @@ func main() {
 	txm := txmanager.New(pool)
 	repo := repository.NewTripRepository(pool)
 	svc := service.NewTripService(repo, txm)
-	handler := api.NewHandler(svc, pool, cfg.Database.QueryTimeout)
+
+	newRepo := triprepo.New(pool)
+	createUC := tripcreateuc.New(newRepo, txm)
+	createHandler := tripcreatehttp.New(createUC)
+	getUC := tripgetuc.New(newRepo)
+	getHandler := tripgethttp.New(getUC)
+	finishUC := tripfinishuc.New(newRepo, txm)
+	finishHandler := tripfinishhttp.New(finishUC)
+
+	handler := api.NewHandlerWithUsecases(
+		svc,
+		pool,
+		cfg.Database.QueryTimeout,
+		createHandler,
+		getHandler,
+		finishHandler,
+	)
 
 	r := chi.NewRouter()
 
