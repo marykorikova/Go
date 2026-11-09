@@ -3,12 +3,10 @@ package create
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
-	domaintrip "github.com/marykorikova/Go/internal/domain/trip"
 	apiGen "github.com/marykorikova/Go/internal/generated"
 	"github.com/marykorikova/Go/internal/http/domainerror"
 	triphttp "github.com/marykorikova/Go/internal/http/trip"
@@ -58,15 +56,8 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 
 	trip, err := h.usecase.Execute(r.Context(), input)
 	if err != nil {
-		if errors.Is(err, domaintrip.ErrDriverBusy) {
-			domainerror.Write(w, r, http.StatusConflict,
-				"driver_busy", "Driver already has an active trip")
-			return
-		}
-
 		slog.Error("failed to create trip", "error", err)
-		domainerror.Write(w, r, http.StatusInternalServerError,
-			"internal_error", "Internal server error")
+		domainerror.WriteDomainError(w, r, err)
 		return
 	}
 
