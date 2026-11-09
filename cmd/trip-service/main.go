@@ -19,9 +19,7 @@ import (
 	tripfinishhttp "github.com/marykorikova/Go/internal/http/trip/finish"
 	tripgethttp "github.com/marykorikova/Go/internal/http/trip/get"
 	"github.com/marykorikova/Go/internal/logger"
-	"github.com/marykorikova/Go/internal/repository"
 	triprepo "github.com/marykorikova/Go/internal/repository/trip"
-	"github.com/marykorikova/Go/internal/service"
 	"github.com/marykorikova/Go/internal/txmanager"
 	tripcreateuc "github.com/marykorikova/Go/internal/usecase/trip/create"
 	tripfinishuc "github.com/marykorikova/Go/internal/usecase/trip/finish"
@@ -53,8 +51,6 @@ func main() {
 	defer pool.Close()
 
 	txm := txmanager.New(pool)
-	repo := repository.NewTripRepository(pool)
-	svc := service.NewTripService(repo, txm)
 
 	newRepo := triprepo.New(pool)
 	createUC := tripcreateuc.New(newRepo, txm)
@@ -65,7 +61,6 @@ func main() {
 	finishHandler := tripfinishhttp.New(finishUC)
 
 	handler := api.NewHandlerWithUsecases(
-		svc,
 		pool,
 		cfg.Database.QueryTimeout,
 		createHandler,

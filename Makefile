@@ -1,3 +1,4 @@
+.PHONY: build run test test-integration generate migrate-up migrate-down tidy fmt lint
 .PHONY: build run test generate migrate-up migrate-down tidy fmt lint
 
 -include .env
@@ -12,7 +13,12 @@ run:
 	go run ./cmd/trip-service
 
 test:
-	go test ./...
+	go test ./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -n 1
+
+test-integration:
+	go test -tags=integration ./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -n 1
 
 tidy:
 	go mod tidy
