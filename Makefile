@@ -27,7 +27,7 @@ fmt:
 	gofmt -w ./cmd ./internal
 
 lint:
-	go vet ./...
+	golangci-lint run ./...
 
 generate:
 	go tool oapi-codegen \

@@ -40,7 +40,7 @@ func NewHandlerWithUsecases(
 func writeError(w http.ResponseWriter, r *http.Request, status int, code string, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"type":     "https://tripgo.example/problems/" + code,
 		"title":    code,
 		"status":   status,
@@ -73,7 +73,7 @@ func (h *Handler) FinishTrip(w http.ResponseWriter, r *http.Request, tripId apiG
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
@@ -83,10 +83,10 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := h.pool.Ping(ctx); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"unavailable"}`))
+		_, _ = w.Write([]byte(`{"status":"unavailable"}`))
 		return
 	}
-	w.Write([]byte(`{"status":"ok"}`))
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 func (h *Handler) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {

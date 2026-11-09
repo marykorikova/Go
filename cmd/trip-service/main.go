@@ -75,7 +75,7 @@ func main() {
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			w.Header().Set("Content-Type", "application/problem+json")
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"type":"https://tripgo.example/problems/invalid-request","title":"invalid_request","status":400,"detail":"invalid path parameters","code":"invalid_request"}`))
+			_, _ = w.Write([]byte(`{"type":"https://tripgo.example/problems/invalid-request","title":"invalid_request","status":400,"detail":"invalid path parameters","code":"invalid_request"}`))
 		},
 	})
 
