@@ -15,15 +15,18 @@ import (
 	"github.com/marykorikova/Go/internal/config"
 	"github.com/marykorikova/Go/internal/db"
 	apiGen "github.com/marykorikova/Go/internal/generated"
+	"github.com/marykorikova/Go/internal/http/middleware"
 	tripcreatehttp "github.com/marykorikova/Go/internal/http/trip/create"
 	tripfinishhttp "github.com/marykorikova/Go/internal/http/trip/finish"
 	tripgethttp "github.com/marykorikova/Go/internal/http/trip/get"
 	"github.com/marykorikova/Go/internal/logger"
 	triprepo "github.com/marykorikova/Go/internal/repository/trip"
+	"github.com/marykorikova/Go/internal/telemetry"
 	"github.com/marykorikova/Go/internal/txmanager"
 	tripcreateuc "github.com/marykorikova/Go/internal/usecase/trip/create"
 	tripfinishuc "github.com/marykorikova/Go/internal/usecase/trip/finish"
 	tripgetuc "github.com/marykorikova/Go/internal/usecase/trip/get"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -34,6 +37,16 @@ func main() {
 	}
 
 	log := logger.New(cfg.LogLevel)
+	shutdownTracing, err := telemetry.InitTracing(context.Background())
+	if err != nil {
+		log.Error("failed to initialize tracing", "error", err)
+		os.Exit(1)
+	}
+	shutdownMetrics, err := telemetry.InitMetrics(context.Background())
+	if err != nil {
+		log.Error("failed to initialize metrics", "error", err)
+		os.Exit(1)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Database.ConnectTimeout)
 	pool, err := db.New(ctx, db.Config{
@@ -69,6 +82,7 @@ func main() {
 	)
 
 	r := chi.NewRouter()
+	r.Use(middleware.Logging(log))
 
 	apiGen.HandlerWithOptions(handler, apiGen.ChiServerOptions{
 		BaseRouter: r,
@@ -81,7 +95,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           r,
+		Handler:           otelhttp.NewHandler(r, "trip-service"),
 		ReadTimeout:       5 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -108,4 +122,22 @@ func main() {
 		log.Error("graceful shutdown failed", "error", err)
 	}
 	log.Info("server stopped")
+	traceCtx, traceCancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+	defer traceCancel()
+
+	if err := shutdownTracing(traceCtx); err != nil {
+		log.Error("failed to shutdown tracing", "error", err)
+	}
+	metricsCtx, metricsCancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+	defer metricsCancel()
+
+	if err := shutdownMetrics(metricsCtx); err != nil {
+		log.Error("failed to shutdown metrics", "error", err)
+	}
 }
