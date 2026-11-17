@@ -9,5 +9,17 @@ linters:
     - staticcheck
     - unused
 
+  settings:
+    depguard:
+      rules:
+        domain:
+          files:
+            - "**/internal/domain/**/*.go"
+          deny:
+            - pkg: "github.com/marykorikova/Go/internal/http"
+              desc: "Domain must not depend on HTTP layer"
+            - pkg: "github.com/marykorikova/Go/internal/repository"
+              desc: "Domain must not depend on repository layer"
+
 run:
   timeout: 5m

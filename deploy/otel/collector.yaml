@@ -5,15 +5,22 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
   debug:
     verbosity: detailed
+
+  otlp/jaeger:
+    endpoint: tripgo-jaeger:4317
+    tls:
+      insecure: true
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [debug, otlp/jaeger]
 
     metrics:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [debug, prometheus]

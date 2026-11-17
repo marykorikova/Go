@@ -2,11 +2,11 @@ package create
 
 import (
 	"context"
-	"time"
-
 	"github.com/google/uuid"
 	domaintrip "github.com/marykorikova/Go/internal/domain/trip"
 	"github.com/marykorikova/Go/internal/model"
+	"go.opentelemetry.io/otel"
+	"time"
 )
 
 type Usecase struct {
@@ -25,6 +25,9 @@ func (u *Usecase) Execute(
 	ctx context.Context,
 	input model.CreateTripInput,
 ) (model.Trip, error) {
+	ctx, span := otel.Tracer("trip-service/usecase").Start(ctx, "trip.create")
+	defer span.End()
+
 	trip := model.Trip{
 		ID:         uuid.New(),
 		UserID:     input.UserID,
