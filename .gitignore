@@ -3,3 +3,12 @@
 *.log
 bin/
 *.tar.gz
+
+# Отчёты покрытия тестами
+coverage*.out
+
+# Исполняемый файл сервиса
+/trip-service
+
+# Резервные копии README
+README.md.backup

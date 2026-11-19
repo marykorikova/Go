@@ -144,56 +144,14 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
-func TestHandler_PositionsNotImplemented(t *testing.T) {
-	tests := []struct {
-		name   string
-		method string
-		handle func(http.ResponseWriter, *http.Request)
-	}{
-		{
-			name:   "list positions",
-			method: http.MethodGet,
-			handle: func(w http.ResponseWriter, r *http.Request) {
-				(&Handler{}).ListTripPositions(w, r, uuid.New())
-			},
-		},
-		{
-			name:   "create position",
-			method: http.MethodPost,
-			handle: func(w http.ResponseWriter, r *http.Request) {
-				(&Handler{}).CreateTripPosition(w, r, uuid.New())
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(
-				tt.method,
-				"/trips/123/positions",
-				nil,
-			)
-			recorder := httptest.NewRecorder()
-
-			tt.handle(recorder, request)
-
-			if recorder.Code != http.StatusNotImplemented {
-				t.Errorf(
-					"status = %d, want %d",
-					recorder.Code,
-					http.StatusNotImplemented,
-				)
-			}
-		})
-	}
-}
-
 func TestNewHandlerWithUsecases(t *testing.T) {
 	timeout := 5 * time.Second
 
 	handler := NewHandlerWithUsecases(
 		nil,
 		timeout,
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -235,6 +193,8 @@ func TestHandler_GetTrip_DelegatesToUsecase(t *testing.T) {
 		5*time.Second,
 		nil,
 		tripget.New(fake),
+		nil,
+		nil,
 		nil,
 	)
 
@@ -290,6 +250,8 @@ func TestHandler_FinishTrip_DelegatesToUsecase(t *testing.T) {
 		nil,
 		nil,
 		tripfinish.New(fake),
+		nil,
+		nil,
 	)
 
 	tripID := uuid.New()

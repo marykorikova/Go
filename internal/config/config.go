@@ -9,10 +9,18 @@ import (
 )
 
 type Config struct {
-	HTTPAddr        string
-	LogLevel        string
-	ShutdownTimeout time.Duration
-	Database        DatabaseConfig
+	HTTPAddr             string
+	LogLevel             string
+	ShutdownTimeout      time.Duration
+	PositionStaleAfter   time.Duration
+	PositionScanInterval time.Duration
+	Database             DatabaseConfig
+	Push                 PushConfig
+}
+
+type PushConfig struct {
+	HTTPURL        string
+	RequestTimeout time.Duration
 }
 
 type DatabaseConfig struct {
@@ -32,6 +40,22 @@ func Load() (*Config, error) {
 
 	var err error
 	cfg.ShutdownTimeout, err = getDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.PositionStaleAfter, err = getDuration("POSITION_STALE_AFTER", 2*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.PositionScanInterval, err = getDuration("POSITION_CHECK_INTERVAL", 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.Push.HTTPURL = getEnv("PUSH_HTTP_URL", "")
+	cfg.Push.RequestTimeout, err = getDuration("PUSH_REQUEST_TIMEOUT", time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +92,18 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
+	if c.Push.HTTPURL == "" {
+		return fmt.Errorf("PUSH_HTTP_URL is required")
+	}
+	if c.Push.RequestTimeout <= 0 {
+		return fmt.Errorf("PUSH_REQUEST_TIMEOUT must be > 0")
+	}
+	if c.PositionStaleAfter <= 0 {
+		return fmt.Errorf("POSITION_STALE_AFTER must be > 0")
+	}
+	if c.PositionScanInterval <= 0 {
+		return fmt.Errorf("POSITION_CHECK_INTERVAL must be > 0")
+	}
 	if c.Database.MaxConns <= 0 {
 		return fmt.Errorf("DATABASE_MAX_CONNS must be > 0")
 	}

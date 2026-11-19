@@ -11,14 +11,18 @@ import (
 	tripcreate "github.com/marykorikova/Go/internal/http/trip/create"
 	tripfinish "github.com/marykorikova/Go/internal/http/trip/finish"
 	tripget "github.com/marykorikova/Go/internal/http/trip/get"
+	positioncreate "github.com/marykorikova/Go/internal/http/trip/position/create"
+	positionlist "github.com/marykorikova/Go/internal/http/trip/position/list"
 )
 
 type Handler struct {
-	pool          *pgxpool.Pool
-	queryTimeout  time.Duration
-	createHandler *tripcreate.Handler
-	getHandler    *tripget.Handler
-	finishHandler *tripfinish.Handler
+	pool                  *pgxpool.Pool
+	queryTimeout          time.Duration
+	createHandler         *tripcreate.Handler
+	getHandler            *tripget.Handler
+	finishHandler         *tripfinish.Handler
+	positionCreateHandler *positioncreate.Handler
+	positionListHandler   *positionlist.Handler
 }
 
 func NewHandlerWithUsecases(
@@ -27,13 +31,17 @@ func NewHandlerWithUsecases(
 	createHandler *tripcreate.Handler,
 	getHandler *tripget.Handler,
 	finishHandler *tripfinish.Handler,
+	positionCreateHandler *positioncreate.Handler,
+	positionListHandler *positionlist.Handler,
 ) *Handler {
 	return &Handler{
-		pool:          pool,
-		queryTimeout:  queryTimeout,
-		createHandler: createHandler,
-		getHandler:    getHandler,
-		finishHandler: finishHandler,
+		pool:                  pool,
+		queryTimeout:          queryTimeout,
+		createHandler:         createHandler,
+		getHandler:            getHandler,
+		finishHandler:         finishHandler,
+		positionCreateHandler: positionCreateHandler,
+		positionListHandler:   positionListHandler,
 	}
 }
 
@@ -90,8 +98,14 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {
-	w.WriteHeader(http.StatusNotImplemented)
+	ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
+	defer cancel()
+
+	h.positionListHandler.Handle(w, r.WithContext(ctx), tripId)
 }
 func (h *Handler) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripId apiGen.TripId) {
-	w.WriteHeader(http.StatusNotImplemented)
+	ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
+	defer cancel()
+
+	h.positionCreateHandler.Handle(w, r.WithContext(ctx), tripId)
 }
