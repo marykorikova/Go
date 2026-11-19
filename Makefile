@@ -1,4 +1,8 @@
+.PHONY: build run test test-integration generate migrate-up migrate-down tidy fmt lint
 .PHONY: build run test generate migrate-up migrate-down tidy fmt lint
+
+-include .env
+export
 
 DATABASE_URL ?= $(shell grep -E '^DATABASE_URL=' .env 2>/dev/null | cut -d= -f2-)
 
@@ -9,7 +13,12 @@ run:
 	go run ./cmd/trip-service
 
 test:
-	go test ./...
+	go test ./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -n 1
+
+test-integration:
+	go test -tags=integration ./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -n 1
 
 tidy:
 	go mod tidy
@@ -18,7 +27,7 @@ fmt:
 	gofmt -w ./cmd ./internal
 
 lint:
-	go vet ./...
+	golangci-lint run ./...
 
 generate:
 	go tool oapi-codegen \
@@ -28,7 +37,7 @@ generate:
 		contracts/openapi/trip-service.openapi.yaml
 
 migrate-up:
-	goose -dir migrations postgres "$(DATABASE_URL)" up
+	go tool goose -dir migrations postgres "$(DATABASE_URL)" up
 
 migrate-down:
-	goose -dir migrations postgres "$(DATABASE_URL)" down
+	go tool goose -dir migrations postgres "$(DATABASE_URL)" down
